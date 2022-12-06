@@ -17,6 +17,8 @@ The module has the hostname and the IP of the VM as output, so you can use it to
 
 Terraform and Ansible have to be installed.
 
+Cloud-Init VM template created on your Proxmox instance.
+
 To provision a VM you have to set up private key authentication first.
 
 ## How to use
