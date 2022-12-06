@@ -2,7 +2,7 @@
 
 This module is for creating Proxmox resources and supports provisioning via Ansible.
 
-Right now this module only supports the creation of VMs, but I might add LXC support in the future.
+Right now this module only supports the creation of VMs with a Cloud-Init template as a base image, but I might add LXC support in the future.
 
 ## How does it work?
 
