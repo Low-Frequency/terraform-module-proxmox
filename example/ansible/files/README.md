@@ -1,0 +1,2 @@
+# INFO
+This is just an empty file for demonstration purposes and to make the example complete. If you want to copy this example please replace this backup file with an actual backuo of your ioBroker instance.

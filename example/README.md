@@ -1,0 +1,3 @@
+# Example for using the Proxmox Terraform module
+
+The code provided in this example sets up a VM with 2GB of RAM, 2 Cores and 32GB disk space and provisions it with Ansible. The Ansible playbook will install an ioBroker server and restore the backup located in the files directory. The backup however is not functional. It's not even a real backup. It's just there to give a complete overview on how ansible works in this module.

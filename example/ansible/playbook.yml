@@ -1,0 +1,7 @@
+---
+- name: Install Test iobroker Server
+  hosts: all
+  
+  roles:
+    - geerlingguy.nodejs
+    - iobroker
