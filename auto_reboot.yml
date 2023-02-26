@@ -1,0 +1,27 @@
+---
+- name: Manage auto reboot cronjob
+  hosts: all
+  vars:
+    destroy: false
+
+  tasks:
+    - name: Shutdown cronjob
+      cron:
+        name: "Shutdown {{server_name}}"
+        month: "*"
+        day: "*"
+        weekday: "*"
+        hour: "{{shutdown_hour}}"
+        minute: "{{shutdown_minute}}"
+        job: "/usr/sbin/qm shutdown {{server_id}}"
+        state: "{{reboot_cron_state}}"
+    - name: Startup cronjob
+      cron:
+        name: "Startup {{server_name}}"
+        month: "*"
+        day: "*"
+        weekday: "*"
+        hour: "{{start_hour}}"
+        minute: "{{start_minute}}"
+        job: "/usr/sbin/qm start {{server_id}}"
+        state: "{{reboot_cron_state}}"

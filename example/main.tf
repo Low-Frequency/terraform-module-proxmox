@@ -15,10 +15,10 @@ module "module-test" {
   
   user      = "some_user"
   password  = var.user_password
-  sshkeys   = var.user_public_key
+  sshkeys   = file(var.path_to_public_key)
 
-  ip      = "10.11.12.13/16"
-  gateway = "10.11.12.1"
+  network   = "vlan_10"
+  ip_index  = 10
 
   enable_ansible    = true
   ansible_playbook  = "playbook.yml"

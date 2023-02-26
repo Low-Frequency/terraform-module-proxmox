@@ -1,11 +1,11 @@
-## VM creation
+### VM creation
 resource "proxmox_vm_qemu" "vm" {
   # General VM Settings
   name        = var.name
   desc        = var.description
-  vmid        = var.id
+  vmid        = local.vm_id
   target_node = var.target_node
-  tags        = var.tags
+  tags        = var.network
  
   # Startup
   bios    = var.bios
@@ -52,40 +52,66 @@ resource "proxmox_vm_qemu" "vm" {
   ciuser       = var.user
   cipassword   = var.password
   searchdomain = var.searchdomain
-  nameserver   = var.nameserver
+  nameserver   = local.nameserver
   sshkeys      = var.sshkeys
-  ipconfig0    = var.ip == "dhcp" ? "ip=${var.ip}" : "ip=${var.ip},gw=${var.gateway}"
+  ipconfig0    = local.ipconfig
 
   # Networking
   network {
     model    = var.nic_model
     bridge   = var.bridge
-    tag      = var.vlan_tag
+    tag      = local.vlan_id
     firewall = var.firewall
   }
 }
 
-## Wait for Boot Process
-resource "time_sleep" "boot_process" {
-  count = var.enable_ansible && var.ip != "dhcp" ? 1 : 0
+### Wait for first Boot Process
+### Without DHCP setup, cloud-init is somehow unable to apply the IP address to the VM
+### A reboot however will apply the network config through cloud-init
+### This sleep makes sure the VM boots completely before rebooting it to apply the network config
+resource "time_sleep" "first_boot" {
+  count = var.enable_ansible || ! var.enable_dhcp ? 1 : 0
   
-  create_duration = "300s"
+  create_duration = "150s"
   
   depends_on = [
     proxmox_vm_qemu.vm
   ]
 }
 
-## Ansible Playbook execution
-locals {
-  # There might be an easier way to make multiple datatypes for ansible vars work. If you know one, please let me know
-  ansible_vars  = jsonencode(var.ansible_object_vars) == "{}" ? jsonencode(var.ansible_plain_vars) : (jsonencode(var.ansible_plain_vars) == "{}" ? jsonencode(var.ansible_object_vars) : replace(jsonencode(var.ansible_object_vars), "/}$/", replace(jsonencode(var.ansible_plain_vars), "/^{/", ",")))
-  ip_address    = strrev(substr(strrev(var.ip), 3, 16))
-  ansible_debug = var.ansible_debug ? "-vvv" : ""
+### Reboot VM to apply cloud-init network config
+resource "null_resource" "reboot_vm" {
+  count = var.enable_dhcp ? 0 : 1
+
+  provisioner "local-exec" {
+    command = <<EOF
+      ANSIBLE_HOST_KEY_CHECKING=False \
+      ansible all -i '${var.proxmox_host_address},' \
+      -u '${var.ansible_user}' \
+      --private-key '${var.ansible_ssh_key_path}' \
+      -a 'sudo qm reboot ${local.vm_id}'
+      EOF
+  }
+
+  depends_on = [
+    time_sleep.first_boot
+  ]
 }
 
+### Waiting again to make sure the VM is fully started before provisioning
+resource "time_sleep" "restart" {
+  count = var.enable_ansible && ! var.enable_dhcp ? 1 : 0
+  
+  create_duration = "150s"
+  
+  depends_on = [
+    null_resource.reboot_vm
+  ]
+}
+
+### Provision VM
 resource "null_resource" "ansible" {
-  count = var.enable_ansible && var.ip != "dhcp" ? 1 : 0
+  count = var.enable_ansible && ! var.enable_dhcp ? 1 : 0
   
   triggers = {
     variables = local.ansible_vars
@@ -99,21 +125,72 @@ resource "null_resource" "ansible" {
     connection {
       host        = local.ip_address
       type        = "ssh"
-      user        = var.user
-      private_key = file("${var.private_key}")
+      user        = "${var.ansible_user}"
+      private_key = file(var.ansible_ssh_key_path)
     }
   }
 
   provisioner "local-exec" {
     command = <<EOF
-chmod 755 ${var.ansible_dir} && \
-cd ${var.ansible_dir} && \
-ansible-galaxy install -r ${var.ansible_requirements_file} -p roles && \
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u '${var.user}' -e '${local.ansible_vars}' -i '${local.ip_address},' ${var.ansible_playbook} ${local.ansible_debug}
-EOF
+      chmod 755 ${var.ansible_dir} && \
+      cd ${var.ansible_dir} && \
+      ansible-galaxy install -r ${var.ansible_requirements_file} -p roles && \
+      ANSIBLE_HOST_KEY_CHECKING=False \
+      ansible-playbook -u '${var.ansible_user}' \
+      --private-key '${var.ansible_ssh_key_path}' \
+      -e '${local.ansible_vars}' \
+      -i '${local.ip_address},' \
+      ${var.ansible_playbook} \
+      ${local.ansible_debug}
+      EOF
   }
 
   depends_on = [
-    time_sleep.boot_process
+    time_sleep.restart
+  ]
+}
+
+### Create reboot schedule
+resource "null_resource" "reboot_schedule" {
+  count    = var.enable_auto_reboot ? 1 : 0
+
+  triggers = {
+    ansible_variables = local.reboot_ansible_vars
+    ansible_directory = var.ansible_dir
+  }
+
+  provisioner "local-exec" {
+    command = <<EOF
+      chmod 755 ${self.triggers.ansible_directory} && \
+      cd ${self.triggers.ansible_directory} && \
+      find ../.terraform/modules -type f -name auto_reboot.yml -exec cp "{}" . \; && \
+      ANSIBLE_HOST_KEY_CHECKING=False \
+      ansible-playbook -u '${var.ansible_user}' \
+      --private-key '${var.ansible_ssh_key_path}' \
+      -i '${var.proxmox_host_address},' \
+      -e '${self.triggers.ansible_variables}' \
+      -e "reboot_cron_state=present" \
+      auto_reboot.yml
+      EOF
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<EOF
+      chmod 755 ${self.triggers.ansible_directory} && \
+      cd ${self.triggers.ansible_directory} && \
+      find ../.terraform/modules -type f -name auto_reboot.yml -exec cp "{}" . \; && \
+      ANSIBLE_HOST_KEY_CHECKING=False \
+      ansible-playbook -u '${var.ansible_user}' \
+      --private-key '${var.ansible_ssh_key_path}' \
+      -i '${var.proxmox_host_address},' \
+      -e '${self.triggers.ansible_variables}' \
+      -e "reboot_cron_state=absent" \
+      auto_reboot.yml
+      EOF
+  }
+
+  depends_on = [
+    proxmox_vm_qemu.vm
   ]
 }

@@ -19,7 +19,7 @@ variable "user_password" {
   type        = string
 }
 
-variable "user_public_key" {
-  description = "Public key for user on deployed VM. Use an environment variable for this if you push this to a non private git repo"
+variable "path_to_public_key" {
+  description = "Path to your public key"
   type        = string
 }

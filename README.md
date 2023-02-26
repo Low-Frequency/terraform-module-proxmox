@@ -6,18 +6,19 @@ Right now this module only supports the creation of VMs with a Cloud-Init templa
 
 ## How does it work?
 
-The module creates a VM and if activated waits for 5 minutes to finish the boot process (This makes sure that there is no dpkg lock present which will break some Ansible tasks that use the apt module. I haven't found a more elegant way to work around this, but if you know one please let me know).
-After waiting for the boot process the module will install all required roles listed in the `requirements.yml` and execute the playbook defined in the `main.tf`.
+The module creates a VM and waits for the boot process to finish (This makes sure that there is no dpkg lock present which will break some Ansible tasks that use the apt module).
+Since I haven't setup DHCP in my server VLANs, cloud-init behaves a little bit funky and refuses to apply the network config on the first boot. Due to this I have added a reboot before provisioning the VM.
 
-Provisioning via Ansible is only possible if you configure a static IP for the VM. If you don't define an IP address it will default to DHCP and disable provisioning.
+After the reboot, the module will install all required roles listed in `ansible/requirements.yml` and execute the playbook defined in your module call.
 
-The module has the hostname and the IP of the VM as output, so you can use it to create DNS entries with terraform or call other modules that need those values.
+Provisioning via Ansible is only possible if you configure a static IP for the VM. The IP is calculated via a given network and an ip index.
+The networks have to be defined in the `locals.tf` and have to be mapped to a corresponding VLAN ID.
+
+The module has the hostname, IP and the VM ID as output, so you can use it to create DNS entries with terraform or call other modules that need those values.
 
 ## Requirements
 
 Terraform and Ansible have to be installed.
-
-To provision a VM you have to set up private key authentication first.
 
 ## How to use
 

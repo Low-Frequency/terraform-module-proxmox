@@ -6,15 +6,9 @@ variable "name" {
 }
 
 variable "description" {
-  description     = "Text that should appear in the notes section. Optional"
+  description     = "Text that should appear in the notes section"
   type            = string
   default         = null
-}
-
-variable "id" {
-  description     = "ID of the created VM. 0 for next free ID"
-  type            = number
-  default         = 0
 }
 
 variable "target_node" {
@@ -64,7 +58,7 @@ variable "disk" {
   description     = "List of disks"
   type            = list(object({
     disk_type     = optional(string, "scsi")
-    storage_pool  = optional(string, "local-lvm")
+    storage_pool  = optional(string, "local-zfs")
     disk_size     = string
     ssd           = optional(number, 1)
     discard       = optional(string, "on")
@@ -75,7 +69,7 @@ variable "disk" {
 }
 
 variable "usb" {
-  description     = "USB Device to be handed to the VM. Doesn't work right now due to a bug in the Proxmox API"
+  description     = "USB Device to be handed to the VM"
   type            = list(object({
     host          = string
     usb3          = bool
@@ -101,6 +95,14 @@ variable "startup" {
   description     = "Boot order of the VM. Can be 'order=number' or empty for any"
   type            = string
   default         = ""
+
+  validation {
+    condition     = (
+      var.startup == "" ||
+      ( substr(var.startup, 0, 6) == "order=" && length(regexall("[0-9]+", substr(var.startup, 6, 4))) > 0 )
+    )
+    error_message = "var.startup must be empty or has to be in the format 'order=NUMBER'."
+  }
 }
 
 variable "boot" {
@@ -118,13 +120,15 @@ variable "agent" {
 ### OS Settings
 
 variable "iso" {
-  description     = "ISO Image to boot from. Has to be uncommented in the main.tf if you want to use it. Comment the template line instead"
+  description     = "ISO Image to boot from"
   type            = string
+  default         = ""
 }
 
 variable "template" {
   description     = "Template to use as base image"
   type            = string
+  default         = "ubuntu-2204"
 }
 
 variable "full_clone" {
@@ -148,35 +152,26 @@ variable "user" {
 
 variable "password" {
   description     = "Cloud Init Password"
-  type            =  string
+  type            = string
   sensitive       = true
 }
 
 variable "searchdomain" {
   description     = "Domain which VM should be added to with Cloud Init"
   type            = string
+  default         = null
 }
 
 variable "nameserver" {
   description     = "Nameserver that should be added via Cloud Init"
   type            = string
+  default         = null
 }
 
 variable "sshkeys" {
   description     = "SSH Key to be added to the VM"
   type            = string
-}
-
-variable "ip" {
-  description     = "IP address with CIDR style subnet mask (10.11.12.13/14)"
-  type            = string
-  default         = "dhcp"
-}
-
-variable "gateway" {
-  description     = "IP of the standard gateway"
-  type            = string
-  default         = null
+  default         = ""
 }
 
 ### Networking
@@ -193,16 +188,27 @@ variable "bridge" {
   default         = "vmbr0"
 }
 
-variable "vlan_tag" {
-  description     = "VLAN Tag for the VM. -1 to turn VLAN Tagging off"
-  type            = number
-  default         = -1
-}
-
 variable "firewall" {
-  description     = "Define if the firewall should be used"
+  description     = "Enable/disable firewall"
   type            = bool
   default         = true
+}
+
+variable "network" {
+  description     = "Name of the network to join the VM"
+  type            = string
+  default         = "vlan_10"
+}
+
+variable "ip_index" {
+  description     = "IP to assign in the respective network"
+  type            = number
+}
+
+variable "enable_dhcp" {
+  description     = "Set to true to enable DHCP"
+  type            = bool
+  default         = false
 }
 
 ### Ansible Variables
@@ -220,13 +226,13 @@ variable "ansible_dir" {
 }
 
 variable "ansible_requirements_file" {
-  description     = "Requirements file for Roles to install. Relative to ansible_dir"
+  description     = "Requirements file for Roles to install"
   type            = string
   default         = "requirements.yml"
 }
 
 variable "ansible_playbook" {
-  description     = "Playbook to be used. Relative to ansible_dir"
+  description     = "Playbook to be used"
   type            = string
   default         = "playbook.yml"
 }
@@ -253,4 +259,41 @@ variable "ansible_debug" {
   description     = "Trigger verbose output of ansible"
   type            = bool
   default         = false
+}
+
+variable "ansible_user" {
+  description     = "Ansible user"
+  type            = string
+  default         = "ansible"
+}
+
+variable "ansible_ssh_key_path" {
+  description     = "Path to ansible SSH key"
+  type            = string
+  default         = "~/.ssh/id_rsa_ansible"
+}
+
+### Auto reboot 
+
+variable "enable_auto_reboot" {
+  description     = "Enable automatic reboot for the VM"
+  type            = bool
+  default         = false
+}
+
+variable "shutdown_time" {
+  description     = "Time when the VM will be shut off"
+  type            = string
+  default         = "02:00"
+}
+
+variable "start_time" {
+  description     = "Time when the VM will be powered on"
+  type            = string
+  default         = "08:00"
+}
+
+variable "proxmox_host_address" {
+  description     = "FQDN or IP of the Proxmox host"
+  type            = string
 }
