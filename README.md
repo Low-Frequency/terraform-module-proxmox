@@ -20,6 +20,8 @@ The module has the hostname, IP and the VM ID as output, so you can use it to cr
 
 Terraform and Ansible have to be installed.
 
+Cloud-Init VM template created on your Proxmox instance.
+
 ## How to use
 
 Best way is to look at the example. The documentation for the variables in `variables.tf` should suffice to understand what each variable does.
